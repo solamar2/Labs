@@ -1,0 +1,37 @@
+function [Eye_Pos]= EyePosition_FUNC(Frame)
+%% This function locates pupils in a picture of a face
+%
+% inputs:
+% Frame - frame to locate eyes in. the frame is expected to be a grayscale
+% image.
+% outputs:
+% Eye_pos - 2X2 matrix. row one contains location of left eye x and y
+% coordinates respectivly, row two is the same for right eye.
+%%
+
+%laplace filter: (for edge detection)
+laplace = ones(3,3);
+laplace(2,2) = -8;
+
+% eyes refreneces: (that went throught the same image proccesing as the frames will go through) 
+dataR = load('eyeR.mat'); % right eye photo of proccessed picture to be used to cross-corelate with all the pictures
+eyeR = dataR.eyeR;
+dataL = load('eyeL.mat'); % left eye
+eyeL = dataL.eyeL;
+
+med_pic = medfilt2(Frame); %median filter for noise reduction
+edge2 = imfilter(med_pic, laplace); %laplace filter for edge detection
+bwim2 = im2bw(edge2,0.04); %binary photo to emplify edges
+closed_bw = double(imclose(bwim2,ones(3,3))); %using close operation for further enchancing of edges
+corel_R = xcorr2(closed_bw,eyeR); %correlation between right eye example from a proccessed photo to a proccessed photo
+[y_R,x_R] = find(corel_R == max(max(corel_R))); %maximum correlation indexes - location of right bottom corner of eye exmaple photo
+y_R = y_R(1); x_R = x_R(1); % if there is more then one maximum 
+half_pic = closed_bw;
+half_pic(:,1:round(size(closed_bw,2)/2)) = 0; %drakening left side of the picture to avoid correlation between left eye reffernce to right eye 
+corel_L = xcorr2(half_pic,eyeL); %correlation between left eye example from a proccessed photo to a proccessed photo
+[y_L,x_L] = find(corel_L == max(max(corel_L)));
+y_L = y_L(1); x_L = x_L(1);
+Eye_Pos = [x_L-30 y_L-32; x_R-30 y_R-32]; % the -32 and -30 on x and y coordinates are because the maximum value of the corelation function is given at the bottom right of the refference picture and we correct it to the pupils which are at the center of the refference
+
+end
+   

@@ -1,0 +1,491 @@
+%% post 
+%% 1.
+%1.1
+rice = imread('rice.png');
+figure; imshow(rice);
+
+%1.2
+%histogram of the image
+figure; imhist(rice); xlabel('gray scale'); ylabel('count')
+
+%1.3
+% convertion to binary image
+BinRice = im2bw(rice,115/255); figure; imshow(BinRice);
+
+%1.4
+figure; imshow(rice);
+imdistline; %measuring radius of rice grain
+% performing open and close on the photo to recive the background photo
+disk = strel('disk',13,8);
+background_rice = imopen(rice,disk);
+background_rice = imclose(background_rice,disk);
+figure; imshow(background_rice)
+
+% original image without the background
+no_background = rice - background_rice;
+figure; imshow(no_background)
+
+%1.5
+% repeating 1.2 and 1.3 on the image without background
+figure; imhist(no_background)
+bin_noback = im2bw(no_background,50/255);
+figure; imshow(bin_noback)
+
+%edge detection:
+%laplacian
+laplace = ones(3,3);
+laplace(2,2) = -8;
+rice_edge1 = imfilter(bin_noback,laplace);
+figure; imshow(rice_edge1)
+
+% dilation and removal of binary image from the expended binary image to
+% recive edges
+expended_im = imdilate(bin_noback,ones(3,3));
+figure; subplot(1,2,1); imshow(bin_noback); title('original')
+subplot(1,2,2); imshow(expended_im); title('expended')
+rice_edge2 = expended_im - bin_noback;
+figure; subplot(1,2,1); imshow(rice_edge1); title('laplacian')
+subplot(1,2,2); imshow(rice_edge2); title('expention')
+
+
+
+%1.6
+% removing rice grains that are partialy outside the image
+no_borders = imclearborder(rice_edge2);
+figure; imshow(no_borders)
+% detecting amount of rice grains
+[~,num_shapes] = bwlabel(no_borders,8);
+
+% using negative laplacian to diffrintiate between the grains
+N_lp = -1*laplace;
+rice_edge3 = imfilter(bin_noback,N_lp);
+figure; imshow(rice_edge3)
+
+% removing rice grains that are partialy outside the image
+no_borders = imclearborder(rice_edge3);
+figure; imshow(no_borders)
+% detecting amount of rice grains
+[groups,num_shapes2] = bwlabel(no_borders,8);
+
+%1.7
+% centroids of rice grains:
+s = regionprops(no_borders,'centroid'); 
+centroids = cat(1,s.Centroid);
+% presenting the centroid on the picture
+figure; imshow(no_borders)
+hold on
+plot(centroids(:,1),centroids(:,2),'r*')
+hold off
+
+%mask of left inclined grains
+mask = zeros(256,256);
+for i=1:num_shapes2
+    [y,x] = find(groups == i);
+    
+    if centroids(i,2) > max(y(x == min(x)))
+       uni_y = unique(y);
+       for j = 1:length(uni_y)
+           k = find(y == uni_y(j));
+           mask(uni_y(j),x(min(k)):x(max(k))) = 1;
+       end
+    end
+end
+figure; imshow(mask)
+
+%1.8
+% the original rice grains photo with only left inclined grains
+figure; imshow(uint8(double(rice).*mask))
+
+
+
+
+
+%% 2.
+%2.1
+Vegt = imread('vegetables.tif'); % vegetable iamge
+Nveg = imread('Nvegetables.tif'); % vegtable image with salt and pepper noise
+
+% presenting the images
+figure; subplot(1,2,1); imshow(Vegt); title('original vegetables')
+subplot(1,2,2); imshow(Nveg); title('salt&pepper vegetables') 
+
+% vectors for midean filter dimensions
+m = [1 1 2 3 3 4 4 5 7];
+n = [2 3 2 3 4 4 5 5 7];
+MSE = zeros(1,length(m));
+
+%filtering the noised veg image with median filter of different sizes,
+%presenting the results and calculating the MSE from the original veg image
+figure;
+for i=1:length(m)
+    I = medfilt2(Nveg,[m(i) n(i)]);
+    subplot(3,3,i); imshow(I); title([num2str(m(i)) 'X' num2str(n(i)) ' meadian filter'])
+    MSE(i) = immse(I,Vegt);
+end
+
+% MSE of filtered images
+figure; scatter(1:9,MSE, 'filled'); xlabel('index'); ylabel('MSE')
+
+%2.2
+% repeating the previous experiment 100 times and presenting the mean and
+% std of the MSE
+MSE_2 = zeros(100,9);
+for j=1:100
+    Nveg2 = imnoise(Vegt,'salt & pepper',0.2);
+    for i=1:length(m)
+    I = medfilt2(Nveg2,[m(i) n(i)]);
+    MSE_2(j,i) = immse(I,Vegt);
+    end
+end
+mean_MSE = mean(MSE_2);
+std_MSE = std(MSE_2);
+figure; subplot(1,2,1); scatter(1:9,mean_MSE,'filled'); xlabel('index'); ylabel('mean'); title('mean MSE')
+subplot(1,2,2); scatter(1:9, std_MSE,'filled'); xlabel('index'); ylabel('standart diviation'); title('standart diviation of MSE')
+
+p = zeros(9,9);
+for j=1:9
+    for i=1:9
+        p(j,i) = anova1([MSE_2(:,i), MSE_2(:,j)]);
+    end
+end
+
+%% 3.
+eye_photo = load('1.1.mat'); %load images
+pics = eye_photo.pics;
+
+
+% removing last pic of each looking direction out:
+pics3 = cell(1,4);
+for i = 1:4
+    for j=1:16
+        pics3{1,i}{j} = pics{1,i}{j};
+    end
+end
+
+%3.2
+%example of eye detection image
+figure
+for i=1:4
+  subplot(2,2,i);
+  I = rgb2gray(pics{1,i}{10}(150:400,250:950,:));
+  Eye_Pos = EyePosition_FUNC(I);
+  I = insertShape(I,'circle',[Eye_Pos(1,:), 10]);
+  I = insertShape(I,'circle',[Eye_Pos(2,:), 10]);
+  imshow(I)
+  title(['Direction ' num2str(i)])
+end
+
+%3.3
+%2D histograms of each looking direction of left eye
+EyeCalib_L = EyeCalibration_FUNC(pics,1);
+figure; subplot(1,2,1);
+for i=1:4
+    histogram2(EyeCalib_L(:,2*i-1),EyeCalib_L(:,2*i),20)
+    hold on;
+    
+end
+title('Left eye histogram'); xlabel('x'); ylabel('y')
+legend('direction 1', 'direction 2', 'direction 3', 'direction 4');
+
+%2D histograms of each looking direction of right eye
+EyeCalib_R = EyeCalibration_FUNC(pics,2);
+subplot(1,2,2); 
+for i=1:4
+    histogram2(EyeCalib_R(:,2*i-1),EyeCalib_R(:,2*i),20)
+    hold on;
+    
+end
+title('Right eye histogram'); xlabel('x'); ylabel('y')
+legend('direction 1', 'direction 2', 'direction 3', 'direction 4');
+
+
+%3.4
+% horizontal dimension (x) histograms of left and right eyes 
+edge_R = 100:2:250;
+edge_L = 480:2:640;
+figure; subplot(1,2,1)
+for i=1:4
+    histogram(EyeCalib_L(:,2*i-1),edge_L)
+    hold on;
+    
+end
+title('Left eye histogram'); xlabel('x'); ylabel('counts')
+legend('direction 1', 'direction 2', 'direction 3', 'direction 4');
+
+subplot(1,2,2);
+for i=1:4
+    histogram(EyeCalib_R(:,2*i-1),edge_R)
+    hold on;
+    
+end
+legend('direction 1', 'direction 2', 'direction 3', 'direction 4');
+title('Left eye histogram'); xlabel('x'); ylabel('counts')
+
+% normal pdfs created from the data for each looking direction and each eye
+x = 0:256;
+
+figure
+for i=1:4
+    pd_R = fitdist(EyeCalib_R(:,2*i-1),'Normal');
+    y = pdf(pd_R,x);  subplot(2,2,1); plot(x,y); hold on
+    title('Original right eye pdf')
+    legend('Direction 1','Direction 2','Direction 3','Direction 4','Location','Northwest')
+    
+    pd_R_2 = makedist('Normal','mu',pd_R.mu,'sigma',sqrt(pd_R.sigma));
+    y = pdf(pd_R_2,x);  subplot(2,2,2); plot(x,y); hold on
+    title('Transformed right eye pdf')
+    legend('Direction 1','Direction 2','Direction 3','Direction 4','Location','Northwest')
+    
+    pd_L = fitdist(EyeCalib_L(:,2*i),'Normal');
+    y = pdf(pd_L,x);  subplot(2,2,3); plot(x,y); hold on
+    title('Original left eye pdf')
+    legend('Direction 1','Direction 2','Direction 3','Direction 4','Location','Northwest')
+    
+    pd_L_2 = makedist('Normal','mu',pd_L.mu,'sigma',sqrt(pd_L.sigma));
+    y = pdf(pd_L_2,x);  subplot(2,2,4); plot(x,y); hold on
+    title('Transformed left eye pdf')
+    legend('Direction 1','Direction 2','Direction 3','Direction 4','Location','Northwest')
+end
+
+
+
+
+%3.4.2
+% calibration matrix of the images without the last image of each looking
+% direction
+EyeCalib_R_16 = EyeCalibration_FUNC(pics3,2);
+EyeCalib_L_16 = EyeCalibration_FUNC(pics3,1);
+
+% Looking direction test images of known looking direction, one for each
+% direction
+Eye_Look = zeros(1,4);
+for i=1:4
+    Frame = rgb2gray(pics{1,i}{17}(150:400,250:950,:));
+    Eye_Look (i) = EyeLook_FUNC_2(Frame,EyeCalib_R_16);
+end
+
+
+%3.5
+% extracting the images out of avi file 1.2.avi that contains video of
+% looking to different directions:
+
+% saving the video to seperate images files
+outputFolder = uigetdir(path); 
+% Read in the video
+viddir = uigetdir(path);
+viddir = fullfile(viddir,'1.2.avi');
+obj = VideoReader(viddir);
+vid = read(obj);
+% Number of frames
+frames = 445;
+for x = 1 : frames
+    %Create a filename
+    outputBaseFileName = sprintf('Frame %4.4d.png', x);
+    outputFullFileName = fullfile(outputFolder, outputBaseFileName);
+    imwrite(vid(:,:,:,x), outputFullFileName, 'png');
+end
+
+vid_im = cell(1,frames); %cell containing the frames of video 1.2.avi
+for i=1:frames
+    if i<10
+    name = ['Frame 000', num2str(i), '.png'];
+    elseif i>=10 && i<100 
+        name = ['Frame 00', num2str(i) , '.png'];
+    else
+        name = ['Frame 0', num2str(i) , '.png'];
+    end
+   vid_im{i} = imread(name);
+end
+
+% manual segmentation of looking directions in the video
+manual_segment = [ ones(1,13) 2*ones(1,3) ones(1,19) 2*ones(1,30) ...
+                  3*ones(1,31) 2*ones(1,28) 3*ones(1,27) 4*ones(1,28) ...
+                  3*ones(1,30) 2*ones(1,34) ones(1,30) 2*ones(1,27) ...
+                  ones(1,32) 2*ones(1,29) 3*ones(1,32) 2*ones(1,2) ones(1,28) 2*ones(1,22)];
+              
+              
+%3.6
+% using the looking diredtion detection algorithm on the video frames
+confusion_mat = zeros(4,4);
+for i=1:445
+    Frame = rgb2gray(vid_im{i}(150:360,220:920,:));
+    Eye_Look  = EyeLook_FUNC(Frame,EyeCalib_R,EyeCalib_L);
+    confusion_mat(Eye_Look, manual_segment(i)) = confusion_mat(Eye_Look, manual_segment(i)) + 1;
+end
+    figure; confusionchart(confusion_mat') %results of the algorithm
+
+%% 4.
+
+%4.1
+%4.1.1
+% extracting the images out of avi file 2.1.avi that contains video of
+% walking on a treadmill:
+
+% saving the video to seperate images files
+outputFolder = uigetdir(path); 
+% Read in the video
+viddir = uigetdir(path);
+viddir = fullfile(viddir,'2.1.avi');
+obj = VideoReader(viddir);
+vid = read(obj);
+% Number of frames
+frames = 858;
+for x = 1 : frames
+    %Create a filename
+    outputBaseFileName = sprintf('Frame_leg %4.4d.png', x);
+    outputFullFileName = fullfile(outputFolder, outputBaseFileName);
+    imwrite(vid(:,:,:,x), outputFullFileName, 'png');
+end
+
+vid_im = cell(1,frames); %cell containing the frames of video 1.2.avi
+for i=1:frames
+    if i<10
+    name = ['Frame_leg 000', num2str(i), '.png'];
+    elseif i>=10 && i<100 
+        name = ['Frame_leg 00', num2str(i) , '.png'];
+    else
+        name = ['Frame_leg 0', num2str(i) , '.png'];
+    end
+   vid_im{i} = imread(name);
+end
+
+
+% 
+
+
+%finding the approximate radius of the dark circls:
+I = vid_im{3};
+I = rgb2gray(I);
+med_pic = medfilt2(I); %median filter for noise reduction
+bwim2 = im2bw(med_pic,75/255); %binary photo to emplify edges
+figure; imshow(bwim2)
+imdistline; %result - 28.73 diameter
+
+% finding the marker coordinates of each image:
+centers = cell(1,frames); %intialization of cell for the centers in each photo. each cell will contain a 4X2 matrix of the coordaintes
+radii = cell(1,frames); %intialization of the cell for the radius of the black marker circle. each cell will contain 4X1 vector of the 4 radiuses
+for i=1:frames
+   I = vid_im{i};
+   I = rgb2gray(I);
+   med_pic = medfilt2(I); %median filter for noise reduction
+   bwim2 = im2bw(med_pic,75/255); %binary photo to emplify edges
+   [centers{i},radii{i}] = imfindcircles(bwim2,[13 16],'ObjectPolarity','dark', ...
+    'Sensitivity',0.97); 
+end
+
+%% 4.1.2
+n = 1:frames;
+
+%sorting the centers so each center has the same location in the array
+centers_sorted = cell(size(centers));
+for i=1:frames
+    if ~isempty(centers{i})
+        [centers_sorted{i}(:,2),index] = sort(centers{i}(:,2));
+         centers_sorted{i}(:,1) = centers{i}(index,1);
+    end
+end
+
+%matrixes for x and y locations of centers
+x_centers = zeros(5,858);
+y_centers = zeros(5,858);
+for i=1:frames
+    for j=1:size(centers_sorted{i},1)
+    x_centers(j,i) = centers_sorted{i}(j,1);
+    y_centers(j,i) = centers_sorted{i}(j,2);
+    end
+end
+
+% location of each marker in space
+figure;
+for i=1:4
+    subplot(1,4,i); scatter(x_centers(i,:),y_centers(i,:),'filled')
+    title(['Marker' , num2str(i)]); xlabel('x'); ylabel('y');
+    xlim([400 850]); ylim([50 500])
+end
+    
+%4.2
+fs = frames/28; %pixel/sec
+Ts = 1/fs;
+% clearing mistakely identified centers
+x_centers(5,:) = []; 
+y_centers(5,:) = [];
+
+% deriviative of centers location
+difx = (diff(x_centers'))';
+dify = (diff(y_centers'))';
+
+% speed of markers
+speed_pix = sqrt(difx.^2+dify.^2)/Ts; %pixel/sec
+t = Ts:Ts:(28-Ts);
+
+% example of marker 1 speed with outliers
+figure; 
+scatter(t,abs(speed_pix(1,:))) 
+xlabel('time [sec]'); ylabel('speed |pixel/sec|');
+title('Speed of Marker 1')
+
+% markers speed without outliers
+figure;
+for i=1:4
+    subplot(2,2,i)
+   scatter(t,abs(speed_pix(i,:))) 
+   xlabel('time [sec]'); ylabel('speed |pixel/sec|');
+   title(['Speed of Marker ', num2str(i)])
+   xlim([0 5]); ylim([ 0 3000])
+end
+
+% finding the radius in pixels of the marker
+figure; imshow(bwim2)
+imdistline; %result - 13.7 diameter
+
+marker_radius = 13.7/2; %pixel
+
+%conversion of speed to kmh
+speed_m = speed_pix*10^-2/(marker_radius*2); %m/s
+speed_kmh = speed_m*3.6; %kmh
+
+% plot of markers' speed in kmh
+figure;
+for i=1:4
+    subplot(2,2,i)
+   scatter(t,abs(speed_kmh(i,:))) 
+   xlabel('time [sec]'); ylabel('speed |kmh|');
+   title(['Speed of Marker ', num2str(i)])
+   xlim([0 5]); ylim([ 0 6])
+end
+
+% real max and min location of marker 4
+figure;
+scatter(x_centers(4,:),y_centers(4,:),'filled')
+title('Marker 4 poistions'); xlabel('x'); ylabel('y');
+hold on; xline(463,'-r',{'minimum','463'}); xline(830,'-r',{'Maximum','830'});
+
+
+
+% 4.4 
+% angles of thigh as function of time:
+theta_thigh = zeros(1,frames);
+for i=1:frames
+    theta_thigh(i) = atan((x_centers(2,i)-x_centers(1,i))/(y_centers(1,i)-y_centers(2,i)));
+end
+figure; scatter(t,abs(theta_thigh(1:(end-1)))*180/pi)
+xlabel('time [sec]'); ylabel('|\theta_t_h_i_g_h|')
+
+%4.5
+% angles of knee as function of time:
+theta_knee = zeros(1,frames);
+for i=1:frames
+ma = (y_centers(2,i) - y_centers(1,i))/(x_centers(2,i) - x_centers(1,i));
+mb = (y_centers(4,i) - y_centers(3,i))/(x_centers(4,i) - x_centers(3,i));
+x_knee = (-1*x_centers(3,i)*mb + y_centers(3,i) + x_centers(1,i)*ma - y_centers(1,i))/(ma-mb);
+y_knee = (x_knee-x_centers(1,i))*ma+y_centers(1,i);
+
+a = sqrt((x_centers(1,i)-x_knee)^2+(y_centers(1,i)-y_knee)^2);
+b = sqrt((x_centers(4,i)-x_knee)^2+(y_centers(4,i)-y_knee)^2);
+c = sqrt((x_centers(1,i)-x_centers(4,i))^2+(y_centers(1,i)-y_centers(4,i))^2);
+
+theta_knee(i) = acos((a^2+b^2-c^2)/(2*a*b));
+
+end
+figure; scatter(t,abs(theta_knee(1:(end-1)))*180/pi)
+xlabel('time [sec]'); ylabel('|\theta_k_n_e_e|')

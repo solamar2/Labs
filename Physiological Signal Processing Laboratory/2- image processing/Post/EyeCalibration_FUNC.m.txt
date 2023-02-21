@@ -1,0 +1,53 @@
+function [EyeCalib] = EyeCalibration_FUNC(CalibFrames,eye_side)
+%% This function creates a calibration matrix of eyes location when looking into one of 4 different directions
+% inputs:
+% CalibeFrames - frames of face looking into one of 4 different directions
+% eye_side - The calibration matrix is for either right or left eye.
+% use eye_side = 1 for left eye, eye_side = 2 for right eye.
+% outputs: 
+% EyeCalib - The calibration matrix
+%%
+
+M = length(CalibFrames); L = length(CalibFrames{1,1});
+pics2 = cell(1,M*L); %initialize cell for all pics
+% turning the cell of cells of photos into one cell array
+for i=1:length(CalibFrames)
+   for j=1:length(CalibFrames{1,1})
+      pics2{L*(i-1)+j} = CalibFrames{1,i}{j};
+   end
+end
+
+
+only_eyes = cell(1,M*L); %intialize cell for eye area photos
+only_eyes_gray = cell(1,M*L); %intialize cell for gray scale eye area photos
+
+%cut only the eyes part area and create gray sacle images of them:
+for i=1:M*L
+    only_eyes{i} = pics2{i}(150:400,250:950,:);
+    only_eyes_gray{i} = rgb2gray(only_eyes{i});
+end
+
+%laplace filter for edge detection
+laplace = ones(3,3);
+laplace(2,2) = -8;
+
+%first we extract a right and left eye examples out of one of the photos we will
+%procces:
+exmp_pic = only_eyes_gray{19}; %gray scale image
+med_pic = medfilt2(exmp_pic); %median filter for noise reduction
+edge2 = imfilter(med_pic, laplace); %laplace filter for edge detection
+bwim2 = im2bw(edge2,0.04); %binary photo to emplify edges
+closed_bw = double(imclose(bwim2,ones(3,3))); %using close operation for further enchancing of edges
+eyeR = double(closed_bw(130:185,150:220)); % right eye photo of proccessed picture to be used to cross-corelate with all the pictures
+eyeL = double(closed_bw(175:220,495:570)); % left eye
+save('eyeR.mat','eyeR');
+save('eyeL.mat','eyeL');
+
+EyeCalib = NaN(L,8); %initialization of the calibration matrix
+    for i=1:4
+        for j=1:L
+            Eye_Pos = EyePosition_FUNC(only_eyes_gray{(i-1)*L+j});
+            EyeCalib(j,2*i-1:2*i) = Eye_Pos(eye_side,:);
+        end
+    end
+end

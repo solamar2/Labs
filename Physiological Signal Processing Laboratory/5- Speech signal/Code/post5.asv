@@ -1,0 +1,135 @@
+%% 4:
+%4.5:
+[signal,Fs] = audioread("shalom_example.wav"); 
+alpha = 0.95; WindowLength = 30*10^-3; Overlap = 50; % standart parameters for framing
+[ProcessedSig,FramedSig] = PreProcess(signal,Fs,alpha,WindowLength,Overlap); %preprocessing
+%finding quite parts and removing them:
+Idx = FindWordIdx(FramedSig,Fs,WindowLength,Overlap);
+% Deleting the quite parts of the signal:
+% removing overlaping indicies from Idx
+Idx_new = zeros(size(Idx));
+Idx_new(1,:) = Idx(1,:);
+j =1; %index of iterations
+for i=2:length(Idx)
+    % if there is overlap we will combine the two overlapping raws into one
+    if Idx(i,1)<=Idx(i-1,2) 
+        Idx_new(j,2) = Idx(i,2);
+    else
+        j = j + 1;
+        Idx_new(j,:) = Idx(i,:);
+    end
+end
+Idx_new(Idx_new == 0) = []; %deleting raws of zero
+
+% the number of samples in each speech frame
+num_frm_smp = (Idx_new(:,2)-Idx_new(:,1))+1;
+% length of all speech frames combined
+len_loud_signal = sum(num_frm_smp);
+% loud_signal will contain only the speech parts of the original signal
+loud_signal = zeros(1,len_loud_signal);
+j=1;
+
+for i=1:(size(Idx_new,1))
+    loud_signal(j:(j+num_frm_smp(i)-1)) = ProcessedSig(Idx_new(i,1):Idx_new(i,2));
+    j = j + num_frm_smp(i) ;
+end
+
+
+% using the segmentation algorithm on the processed signal:
+eta = 33.66; dt = 0.047; %threshold and minimum time of crossing it
+WindowLength = 0.055;
+[seg_ind,delta] = segmentation(ProcessedSig,WindowLength,eta,dt,Fs,Idx);
+
+%calculate energy and zcr:
+Energy=calcNRG(FramedSig);
+ZCR=calcZCR(FramedSig);
+
+%Overlap is 50% so every new frame is after 240 sampels. 
+ind=ceil(seg_ind/240)+ceil(Idx_new(1)/240);
+ind(end+1)=ceil(Idx_new(2)/240);
+% plotting the sementation results
+new_t = 0:1/Fs:(length(loud_signal)-1)/Fs; %time vector for loud_signal
+phonems = ["SH", "A", "L", "O", "M"]; %phonems of 'SHALOM' vector
+figure, subplot(311), plot(new_t,loud_signal); xlim([-0.05 1.1])
+hold on;
+for i=1:length(seg_ind)
+    if i<=length(phonems)
+        xline(new_t(seg_ind(i)),'r',phonems(i),'LineWidth',2);
+    else
+        xline(new_t(seg_ind(i)),'r','LineWidth',2)
+    end
+end
+hold off
+xlabel 'time [sec]' , ylabel 'amplitude' , title 'Signal segmentation'
+subplot(312); scatter(1:length(Energy),Energy,'filled');
+hold on; xline(ind(1),'r','SH','LineWidth',2);xline(ind(2),'r','A','LineWidth',2);
+xline(ind(3),'r','L','LineWidth',2);xline(ind(4),'r','O','LineWidth',2);xline(ind(5),'r','M','LineWidth',2);
+xline(ind(6),'r','LineWidth',2);
+subplot(313);scatter(1:length(ZCR),ZCR,'filled');
+hold on; xline(ind(1),'r','SH','LineWidth',2);xline(ind(2),'r','A','LineWidth',2);
+xline(ind(3),'r','L','LineWidth',2);xline(ind(4),'r','O','LineWidth',2);xline(ind(5),'r','M','LineWidth',2);
+xline(ind(6),'r','LineWidth',2);
+
+%4.6:
+% 'SH'
+SH_Phoneme=loud_signal(seg_ind(1):seg_ind(2));
+SH_framedPhoneme=FramedSig(ind(1):ind(2),:);
+[SH_FeatsVector,Feat_title]=FeatExt(SH_Phoneme,Fs,SH_framedPhoneme);
+
+% 'A'
+A_Phoneme=loud_signal(seg_ind(2):seg_ind(3));
+A_framedPhoneme=FramedSig(ind(2):ind(3),:);
+[A_FeatsVector,Feat_title]=FeatExt(A_Phoneme,Fs,A_framedPhoneme);
+
+
+% 'L'
+L_Phoneme=loud_signal(seg_ind(3):seg_ind(4));
+L_framedPhoneme=FramedSig(ind(3):ind(4),:);
+[L_FeatsVector,Feat_title]=FeatExt(L_Phoneme,Fs,L_framedPhoneme);
+
+
+% 'O'
+O_Phoneme=loud_signal(seg_ind(4):seg_ind(5));
+O_framedPhoneme=FramedSig(ind(4):ind(5),:);
+[O_FeatsVector,Feat_title]=FeatExt(O_Phoneme,Fs,O_framedPhoneme);
+
+
+% 'M'
+M_Phoneme=loud_signal(seg_ind(5):end);
+M_framedPhoneme=FramedSig(ind(5):ind(6),:);
+[M_FeatsVector,Feat_title]=FeatExt(M_Phoneme,Fs,M_framedPhoneme);
+
+AllFeat=table(Feat_title,SH_FeatsVector,A_FeatsVector,L_FeatsVector,O_FeatsVector,M_FeatsVector);
+
+figure, subplot(311), plot(new_t,loud_signal); xlim([-0.05 1.1])
+hold on;
+for i=1:length(seg_ind)
+    if i<=length(phonems)
+        xline(new_t(seg_ind(i)),'r',phonems(i),'LineWidth',2);
+    else
+        xline(new_t(seg_ind(i)),'r','LineWidth',2)
+    end
+end
+hold off
+xlabel 'time [sec]' , ylabel 'amplitude' , title 'Signal segmentation'
+subplot(312); scatter(1:5,table2array(AllFeat(1,2:end)),'filled'); ylabel('mean Energy');xlabel('phoneme');xlim(0:5)
+
+%% 5:
+
+
+%% 6:
+[shalom,Fs] = audioread('shalom_example.wav');
+sound(shalom,Fs)
+
+[S,F,T] = spectrogram(shalom,hamming(500),250,[],Fs);
+
+figure;imagesc(T,F,10*log10(abs(S)));
+axis xy; xlabel('Time (s)');ylabel('Frequency (Hz)'); 
+c = colorbar; c.Label.String = 'Power/frequency (dB/Hz)'; 
+
+[S,F,T] = spectrogram(shalom,hamming(250),125,[],Fs);
+
+figure;imagesc(T,F,10*log10(abs(S)));
+axis xy; xlabel('Time (s)');ylabel('Frequency (Hz)'); 
+c = colorbar; c.Label.String = 'Power/frequency (dB/Hz)'; 
+

@@ -1,0 +1,35 @@
+function [Eye_Look]= EyeLook_FUNC(Frame,EyeCalib_R,EyeCalib_L)
+%% This function determines the looking location of the eyes out of 4 possible locations using a calibration matrix
+% inputs:
+% Frame - the image we want to locate the looking direction in
+% EyeCalib_R - calibration matrix of right eye
+% EyeCalib_L - calibration matrix of left eye
+% outputs:
+% Eye_Look - direction of looking. a number between 1-4
+%%
+Eye_Pos = EyePosition_FUNC(Frame); %location of pupils in the frame
+
+p_R = zeros(1,4);
+p_L = zeros(1,4);
+
+% creating normal distributions from each data column of the calibration
+% matrix and using the pdf to calculate the highest probbility of the
+% looking direction of the pupils in the image 'Frame'.
+for i=1:4
+    pd_R = fitdist(EyeCalib_R(:,2*i-1),'Normal');
+    pd_R = makedist('Normal','mu',pd_R.mu,'sigma',sqrt(pd_R.sigma));
+    pd_L = fitdist(EyeCalib_L(:,2*i),'Normal');
+    pd_L = makedist('Normal','mu',pd_L.mu,'sigma',sqrt(pd_L.sigma));
+    p_R(i) = pdf(pd_R,Eye_Pos(2,1));
+    p_L(i) = pdf(pd_L,Eye_Pos(1,1));
+end
+% picking the highest probability between those generated from each eye:
+[max_R,Eye_Look_R] = max(p_R);
+[max_L,Eye_Look_L] = max(p_L);
+if max_R >= max_L
+    Eye_Look = Eye_Look_R;
+else
+    Eye_Look = Eye_Look_L;
+end
+
+end

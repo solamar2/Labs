@@ -1,0 +1,1 @@
+[Mean,Data] = ReadData('File_Q6.lvm',195,'End',2);
